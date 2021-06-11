@@ -94,7 +94,7 @@ lgr.dat <- lgr_daily.df %>%
 #test out internals of shiny function
 
 test.dat <- lgr.dat %>% 
-  filter(select_spp=="Lamprey")
+  filter(select_spp=="Sockeye")
 
 test_plot <- test.dat %>% 
   ggplot(aes(x=dummyd,y=Number_Passed,
@@ -111,13 +111,37 @@ test_plot <- test.dat %>%
 test_plot
 
 
-ggplotly(test_plot)
+
+ggplotly(test_plot,tooltip="label")
 
 
 date1 <- format(as.character(Sys.Date(),"%m-%d")) 
-date_plot <- as.Date(paste("2050",show_todays_date,sep="-"))
-mdy(date_plot)
+date_plot <- as.Date(paste("2050",date1,sep="-"))
 
+
+#write a function for the base plot that can be slightly modified
+
+daily_base.f <- function(dat=plotdat){
+  
+  p <- dat %>% 
+    ggplot(aes(dummyd,Number_Passed,label=Day))+
+    geom_line(aes(color=Year))+
+    scale_color_fivethirtyeight()+
+    theme_fivethirtyeight()+
+    labs(x="",y="Number Passing Lower Granite Dam")
+}
+
+
+start <- daily_base.f(dat=test.dat)
+start
+
+
+ggplotly(start)
+
+
+start+
+  scale_x_date(limits=as_date(c("2050-04-01","2050-8-17")),
+               date_breaks="1 month",date_labels="%B")
 #start making a shiny app with these data, just Chinook for now
 
 #build the UI
@@ -172,95 +196,65 @@ server <- function(input,output,session){
     plotdat=reactive_dat()
       
     
-    if(input$species=="Spring-Summer Chinook")
-      return(
-    plotdat %>% 
-      ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-      geom_line(data=plotdat,aes(color=Year))+
-      scale_color_viridis(discrete=TRUE)+
-      facet_wrap(~Maturity)+
-      theme_bw()+
+    sp_su_plot <- daily_base.f(dat=plotdat)+
       scale_x_date(limits=as_date(c("2050-04-01","2050-8-17")),
                    date_breaks="1 month",date_labels="%B")+
-      labs(x="",y="Number passing Lower Granite Dam",
-           color="")+
-      ggtitle("Daily Spring-Summer Chinook Count at Lower Granite Dam"))
+      ggtitle("Daily Spring-Summer Chinook Count at Lower Granite Dam")+
+      facet_wrap(~Maturity)
+    
+    fall_plot <- daily_base.f(dat=plotdat)+
+      scale_x_date(limits=as_date(c("2050-08-17","2050-12-31")),
+                   date_breaks="1 month",date_labels="%B")+
+      ggtitle("Daily Fall Chinook Count at Lower Granite Dam")+
+      facet_wrap(~Maturity)
+      
+    sthd_plot <- daily_base.f(dat=plotdat)+
+      scale_x_date(limits=as_date(c("2050-07-1","2050-12-31")),
+                   date_breaks="1 month",date_labels="%B")+
+      ggtitle("Daily Steelhead Count at Lower Granite Dam")+
+      facet_wrap(~Origin)
+    
+    sock_plot <- daily_base.f(dat=plotdat)+
+      scale_x_date(limits=as_date(c("2050-06-1","2050-12-31")),
+                   date_breaks="1 month",date_labels="%B")+
+      ggtitle("Daily Sockeye Count at Lower Granite Dam")
+    
+    coho_plot <- daily_base.f(dat=plotdat)+
+      scale_x_date(limits=as_date(c("2050-09-01","2050-12-31")),
+                   date_breaks="1 month",date_labels="%B")+
+      ggtitle("Daily Coho Count at Lower Granite Dam")+
+      facet_wrap(~Maturity)
+    
+    lam_plot <- daily_base.f(dat=plotdat)+
+      scale_x_date(limits=as_date(c("2050-03-01","2050-12-31")),
+                   date_breaks="1 month",date_labels="%B")+
+      ggtitle("Daily Lamprey Count at Lower Granite Dam")
+      
+    if(input$species=="Spring-Summer Chinook")
+      return(sp_su_plot)
     
     if(input$species=="Fall Chinook")
-      return(
-        plotdat %>% 
-          ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-          geom_line(data=plotdat,aes(color=Year))+
-          scale_color_viridis(discrete=TRUE)+
-          facet_wrap(~Maturity)+
-          theme_bw()+
-          scale_x_date(limits=as_date(c("2050-08-17","2050-12-31")),
-                       date_breaks="1 month",date_labels="%B")+
-          labs(x="",y="Number passing Lower Granite Dam",
-               color="")+
-          ggtitle("Daily Fall Chinook Count at Lower Granite Dam"))
+      return(fall_plot)
     
     if(input$species=="Steelhead")
-      return(
-        plotdat %>% 
-          ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-          geom_line(data=plotdat,aes(color=Year))+
-          scale_color_viridis(discrete=TRUE)+
-          facet_wrap(~Origin)+
-          theme_bw()+
-          scale_x_date(limits=as_date(c("2050-08-17","2050-12-31")),
-                       date_breaks="1 month",date_labels="%B")+
-          labs(x="",y="Number passing Lower Granite Dam",
-               color="")+
-          ggtitle("Daily Steelhead Count at Lower Granite Dam"))
+      return(sthd_plot)
     
     if(input$species=="Sockeye")
-      return(
-        plotdat %>% 
-          ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-          geom_line(data=plotdat,aes(color=Year))+
-          scale_color_viridis(discrete=TRUE)+
-          theme_bw()+
-          scale_x_date(limits=as_date(c("2050-06-1","2050-12-31")),
-                       date_breaks="1 month",date_labels="%B")+
-          labs(x="",y="Number passing Lower Granite Dam",
-               color="")+
-          ggtitle("Daily Sockeye Count at Lower Granite Dam"))
-    
+      return(sock_plot)
     
     if(input$species=="Coho")
-      return(
-        plotdat %>% 
-          ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-          geom_line(data=plotdat,aes(color=Year))+
-          scale_color_viridis(discrete=TRUE)+
-          facet_wrap(~Maturity)+
-          theme_bw()+
-          scale_x_date(limits=as_date(c("2050-09-01","2050-12-31")),
-                       date_breaks="1 month",date_labels="%B")+
-          labs(x="",y="Number passing Lower Granite Dam",
-               color="")+
-          ggtitle("Daily Coho Count at Lower Granite Dam"))
+      return(coho_plot)
     
     if(input$species=="Lamprey")
-      return(
-        plotdat %>% 
-          ggplot(aes_string(x=plotdat$dummyd,y=plotdat$Number_Passed))+
-          geom_line(data=plotdat,aes(color=Year))+
-          scale_color_viridis(discrete=TRUE)+
-          theme_bw()+
-          scale_x_date(limits=as_date(c("2050-03-01","2050-12-31")),
-                       date_breaks="1 month",date_labels="%B")+
-          labs(x="",y="Number passing Lower Granite Dam",
-               color="")+
-          ggtitle("Daily Lamprey Count at Lower Granite Dam"))
+      return(lam_plot)
 
   })
   
   output$plot <- renderPlotly({
     req(reactive_plot())
-    ggplotly(reactive_plot(),tooltip=c("Year","y")) %>% 
-      layout(hovermode="compare")
+    plotdat=reactive_dat()
+    ggplotly(reactive_plot(),tooltip=c("Day","Year","Number_Passed")) %>% 
+      layout(hovermode="compare") 
   })
   
   
