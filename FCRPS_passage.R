@@ -103,21 +103,61 @@ cumulative_dat <- lgr.dat %>%
   arrange(select_spp,Year,Origin,Maturity,dummyd) %>% 
   group_by(Year,select_spp,Origin,Maturity) %>% 
   mutate(Total_To_Date=cumsum(Number_Passed),
-         percent_to_date=Total_To_Date/annual_total*100) 
+         Percent_To_Date=Total_To_Date/annual_total*100,
+         lt=ifelse(Year=="Average of Last 5 Years","average","annual")) 
 
+
+
+
+#mess with steelhead dates/season
+
+todays_date <- Sys.Date()
+current_year <- year(todays_date)
+
+sthd_alter <- cumulative_dat %>% 
+  filter(select_spp=="Steelhead") %>% 
+  mutate(add_yr=dummyd+years(x=1),
+         dam_month=month(dummyd),
+         spawn_year=ifelse(dam_month<7,yr,(yr+1)),
+         run_yr=if_else(dam_month>6,yr,(yr-1)),
+         year_cat=paste(run_yr,spawn_year,sep="-"),
+         dummyd=if_else(dam_month<7,add_yr,dummyd),
+         year_cat=ifelse(is.na(run_yr),"Average of Last 5 Years",year_cat))
+
+
+st_test <- daily_base.f(dat=sthd_alter)
+st_test
+
+sthd_alter %>% ggplot(aes(dummyd,Number_Passed,label=Day))+
+  geom_line(aes(color=year_cat))+
+  scale_color_fivethirtyeight()+
+  theme_fivethirtyeight()+
+  labs(x="",y="Number Passing Lower Granite Dam")+
+  scale_x_date(date_breaks="1 month",date_labels="%B")
 
 #write a function for the base daily plot that can be slightly modified
 
 daily_base.f <- function(dat=plotdat){
+  
+  x_min <- min(dat$dummyd)
+  x_max <- max(dat$dummyd)
   
   p <- dat %>% 
     ggplot(aes(dummyd,Number_Passed,label=Day))+
     geom_line(aes(color=Year))+
     scale_color_fivethirtyeight()+
     theme_fivethirtyeight()+
-    labs(x="",y="Number Passing Lower Granite Dam")
+    labs(x="",y="Number Passing Lower Granite Dam")+
+    scale_x_date(limits=c(x_min,x_max),
+                 date_breaks="1 month",date_labels="%B")
 }
 
+test.dat <- cumulative_dat %>% 
+  filter(select_spp=="Sockeye")
+
+
+test <- daily_base.f(dat=test.dat)
+test
 
 x_min <- min(plotdat$dummyd)
 x_max <- max(plotdat$dummyd)
@@ -126,8 +166,8 @@ x_max <- max(plotdat$dummyd)
 
 cumulative_base.f <- function(dat=plotdat){
   
-  x_min <- min(plotdat$dummyd)
-  x_max <- max(plotdat$dummyd)
+  x_min <- min(dat$dummyd)
+  x_max <- max(dat$dummyd)
   
   p <- dat %>% 
     ggplot(aes(dummyd,Total_To_Date,label=Day))+
@@ -143,146 +183,136 @@ cumulative_base.f <- function(dat=plotdat){
 
 #build the UI
 
-ui <- dashboardPage(
-  
- dashboardHeader(title="Daily Passage Counts"),
- 
- dashboardSidebar(width=300,
-                  sidebarMenu(
-                    menuItem("Daily Counts",tabName="main",icon=icon("chart-line"))
-                  )),
- 
- dashboardBody(
-   
-   tabItems(
-     
-     #Define UI for daily counts
-     
-     tabItem(tabName="main",
-             
-             column(2,selectInput("species",
-                                  label="Choose a Species:",
-                                  choices=c("Spring-Summer Chinook",
-                                            "Fall Chinook",
-                                            "Steelhead",
-                                            "Sockeye",
-                                            "Coho",
-                                            "Lamprey"))),
-             
-             column(4,offset=1,uiOutput("slider")),
-             
-             column(2,uiOutput("secondSelection")),
-             
-             fluidRow(
-             box(6,plotlyOutput("daily_plot",height=500))
-             
-             ))
-   )
-             
- )
+#work on building the components separately (easier to debug)
+
+header <- dashboardHeader(title="Passage at Dams")
+sidebar <- dashboardSidebar(width=500,
+  sidebarMenu(
+    menuSubItem(icon = NULL,
+                selectInput("species",
+                            label="Choose a Species:",
+                            choices=c("Spring-Summer Chinook",
+                                      "Fall Chinook",
+                                      "Steelhead",
+                                      "Sockeye",
+                                      "Coho",
+                                      "Lamprey"))),
+    sidebarMenuOutput("secondSelection"),
+    sidebarMenuOutput("slider")
+  )
+)
+
+body <- dashboardBody(
+  fluidRow(
+  box(plotlyOutput("cumulative_plot",height=700)),
+  box(plotlyOutput("daily_plot",height=700))
+  )
 )
 
 
+ui <- dashboardPage(header,sidebar,body)
+    
+  
+  
+
 server <- function(input,output,session){
+
   
+  output$secondSelection <- renderMenu({
+    if(input$species=="Spring-Summer Chinook"|
+       input$species=="Fall Chinook"|
+       input$species=="Coho")
+      return( menuSubItem(icon=NULL,
+                selectInput("group_select",
+                            label="Choose a group to plot",
+                            choices=c("Adult","Jack","Total"),
+                            selected="Adult")))
   
-  #make a secondary select input dependent on initial selection of species
-  
-  output$secondSelection <- renderUI({
-    
-    if(input$species=="Spring-Summer Chinook")
-      return(selectInput("group_select",
-             label="Choose a group to plot",
-             choices=c("Adult","Jack","Total"),
-             selected="Adult"))
-    
-    if(input$species=="Fall Chinook")
-      return(selectInput("group_select",
-                         label="Choose a group to plot",
-                         choices=c("Adult","Jack","Total"),
-                         selected="Adult"))
-    
-    if(input$species=="Coho")
-      return(selectInput("group_select",
-                         label="Choose a group to plot",
-                         choices=c("Adult","Jack","Total"),
-                         selected="Adult"))
-    
     if(input$species=="Steelhead")
-      return(selectInput("group_select",
-                         label="Choose a group to plot",
-                         choices=c("Total","Unclipped"),
-                         selected="Total"))
-    
+      return( menuSubItem(icon=NULL,
+                          selectInput("group_select",
+                                      label="Choose a group to plot",
+                                      choices=c("Total","Unclipped"),
+                                      selected="Total")))
+    if(input$species=="Lamprey"|
+       input$species=="Sockeye")
+      return(menuSubItem(icon=NULL,
+                         selectInput("group_select",
+                                     label="Choose a group to plot",
+                                     choices=c("Total"),
+                                     selected="Total")))
   })
   
-  output$slider <- renderUI({
+  output$slider <- renderMenu({
     
     if(input$species=="Spring-Summer Chinook")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-03-01","%Y-%m-%d"),
-                         max=as.Date("2050-08-17","%Y-%m-%d"),
-                         value=c(as.Date("2050-03-01","%Y-%m-%d"),
-                                 as.Date("2050-08-17","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
+      return(menuSubItem(icon=NULL,
+                sliderInput("dates",
+                            label="Choose a date range",
+                            min=as.Date("2050-03-01","%Y-%m-%d"),
+                            max=as.Date("2050-08-17","%Y-%m-%d"),
+                            value=c(as.Date("2050-03-01","%Y-%m-%d"),
+                                    as.Date("2050-08-17","%Y-%m-%d")),
+                            timeFormat="%m-%d")))
     
     if(input$species=="Fall Chinook")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-08-17","%Y-%m-%d"),
-                         max=as.Date("2050-12-31","%Y-%m-%d"),
-                         value=c(as.Date("2050-08-17","%Y-%m-%d"),
-                                 as.Date("2050-12-31","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
-    
+      return(menuSubItem(icon=NULL,
+                         sliderInput("dates",
+                                     label="Choose a date range",
+                                     min=as.Date("2050-08-17","%Y-%m-%d"),
+                                     max=as.Date("2050-12-31","%Y-%m-%d"),
+                                     value=c(as.Date("2050-08-17","%Y-%m-%d"),
+                                             as.Date("2050-12-31","%Y-%m-%d")),
+                                     timeFormat="%m-%d")))
     
     if(input$species=="Coho")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-09-01","%Y-%m-%d"),
-                         max=as.Date("2050-12-31","%Y-%m-%d"),
-                         value=c(as.Date("2050-09-01","%Y-%m-%d"),
-                                 as.Date("2050-12-31","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
+      return(menuSubItem(icon=NULL,
+                         sliderInput("dates",
+                                     label="Choose a date range",
+                                     min=as.Date("2050-09-01","%Y-%m-%d"),
+                                     max=as.Date("2050-12-31","%Y-%m-%d"),
+                                     value=c(as.Date("2050-09-01","%Y-%m-%d"),
+                                             as.Date("2050-12-31","%Y-%m-%d")),
+                                     timeFormat="%m-%d")))
     
     if(input$species=="Steelhead")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-03-01","%Y-%m-%d"),
-                         max=as.Date("2050-12-31","%Y-%m-%d"),
-                         value=c(as.Date("2050-03-01","%Y-%m-%d"),
-                                 as.Date("2050-12-31","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
+    return(menuSubItem(icon=NULL,
+                       sliderInput("dates",
+                                   label="Choose a date range",
+                                   min=as.Date("2050-03-01","%Y-%m-%d"),
+                                   max=as.Date("2050-12-31","%Y-%m-%d"),
+                                   value=c(as.Date("2050-03-01","%Y-%m-%d"),
+                                           as.Date("2050-12-31","%Y-%m-%d")),
+                                   timeFormat="%m-%d")))
     
-    if(input$species=="Sockeye")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-07-01","%Y-%m-%d"),
-                         max=as.Date("2050-12-31","%Y-%m-%d"),
-                         value=c(as.Date("2050-07-01","%Y-%m-%d"),
-                                 as.Date("2050-12-31","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
+   if(input$species=="Sockeye")
+    return(menuSubItem(icon=NULL,
+                       sliderInput("dates",
+                                   label="Choose a date range",
+                                   min=as.Date("2050-07-01","%Y-%m-%d"),
+                                   max=as.Date("2050-12-31","%Y-%m-%d"),
+                                   value=c(as.Date("2050-07-01","%Y-%m-%d"),
+                                           as.Date("2050-12-31","%Y-%m-%d")),
+                                   timeFormat="%m-%d")))
     
     if(input$species=="Lamprey")
-      return(sliderInput("dates",
-                         label="Choose a date range",
-                         min=as.Date("2050-03-01","%Y-%m-%d"),
-                         max=as.Date("2050-12-31","%Y-%m-%d"),
-                         value=c(as.Date("2050-03-01","%Y-%m-%d"),
-                                 as.Date("2050-12-31","%Y-%m-%d")),
-                         timeFormat="%m-%d"))
-
+    return(menuSubItem(icon=NULL,
+                       sliderInput("dates",
+                                   label="Choose a date range",
+                                   min=as.Date("2050-01-01","%Y-%m-%d"),
+                                   max=as.Date("2050-12-31","%Y-%m-%d"),
+                                   value=c(as.Date("2050-01-01","%Y-%m-%d"),
+                                           as.Date("2050-12-31","%Y-%m-%d")),
+                                   timeFormat="%m-%d")))
+    
     
   })
-  
-  #make the data  for the plots react to user inputs
   
   reactive_dat <- reactive({
     
     x_min <- min(input$dates-1)
     x_max <- max(input$dates+1)
-
+    
     dat_salmon <- cumulative_dat%>%
       filter(select_spp==input$species) %>% 
       filter(Maturity==input$group_select) %>% 
@@ -291,10 +321,14 @@ server <- function(input,output,session){
     
     dat_sthd <- cumulative_dat %>% 
       filter(select_spp==input$species) %>% 
-      filter(Origin==input$group_select)
+      filter(Origin==input$group_select) %>% 
+      filter(dummyd > x_min&
+               dummyd < x_max)
     
     dat_others <- cumulative_dat %>% 
-      filter(select_spp==input$species)
+      filter(select_spp==input$species) %>% 
+      filter(dummyd > x_min&
+               dummyd < x_max)
     
     if(input$species=="Spring-Summer Chinook"|
        input$species=="Fall Chinook"|
@@ -308,44 +342,32 @@ server <- function(input,output,session){
        input$species=="Lamprey")
       return(dat_others)
     
-    })
+  })
   
   reactive_plot <- reactive({
     plotdat=reactive_dat()
-      
+    
     x_min <- min(plotdat$dummyd)
     x_max <- max(plotdat$dummyd)
     
     sp_su_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=c(x_min,x_max),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Spring-Summer Chinook Count at Lower Granite Dam")
     
     fall_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=as_date(c("2050-08-17","2050-12-31")),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Fall Chinook Count at Lower Granite Dam")
-      
+    
     sthd_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=as_date(c("2050-07-1","2050-12-31")),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Steelhead Count at Lower Granite Dam")
     
     sock_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=as_date(c("2050-06-1","2050-12-31")),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Sockeye Count at Lower Granite Dam")
     
     coho_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=as_date(c("2050-09-01","2050-12-31")),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Coho Count at Lower Granite Dam")
     
     lam_plot <- daily_base.f(dat=plotdat)+
-      scale_x_date(limits=as_date(c("2050-03-01","2050-12-31")),
-                   date_breaks="1 month",date_labels="%B")+
       ggtitle("Daily Lamprey Count at Lower Granite Dam")
-      
+    
     if(input$species=="Spring-Summer Chinook")
       return(sp_su_plot)
     
@@ -363,20 +385,72 @@ server <- function(input,output,session){
     
     if(input$species=="Lamprey")
       return(lam_plot)
-
+    
   })
+  
+  reactive_cumulative_plot <- reactive({
+    
+    plotdat=reactive_dat()
+    
+    x_min <- min(plotdat$dummyd)
+    x_max <- max(plotdat$dummyd)
+    
+    sp_su_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Spring-Summer Chinook Count at Lower Granite Dam")
+    
+    
+    fall_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Fall Chinook Count at Lower Granite Dam")
+    
+    sthd_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Steelhead Count at Lower Granite Dam")
+    
+    sock_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Sockeye Count at Lower Granite Dam")
+    
+    coho_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Coho Count at Lower Granite Dam")
+    
+    lam_plot <- cumulative_base.f(dat=plotdat)+
+      ggtitle("Cumulative Pacific Lamprey Count at Lower Granite Dam")
+    
+    if(input$species=="Spring-Summer Chinook")
+      return(sp_su_plot)
+    
+    if(input$species=="Fall Chinook")
+      return(fall_plot)
+    
+    if(input$species=="Steelhead")
+      return(sthd_plot)
+    
+    if(input$species=="Sockeye")
+      return(sock_plot)
+    
+    if(input$species=="Coho")
+      return(coho_plot)
+    
+    if(input$species=="Lamprey")
+      return(lam_plot)
+    
+    
+  })
+  
+  
   
   
   output$daily_plot <- renderPlotly({
     req(reactive_plot())
-    plotdat=reactive_dat()
     ggplotly(reactive_plot(),tooltip=c("Day","Year","Number_Passed")) %>% 
       layout(hovermode="x unified") 
   })
   
-
-  
-
+  output$cumulative_plot <- renderPlotly({
+    req(reactive_cumulative_plot())
+    ggplotly(reactive_cumulative_plot(),tooltip=c("Day","Year","Total_To_Date")) %>% 
+      layout(hovermode="x unified") 
+    
+  })
 }
 
 shinyApp(ui,server)
+
