@@ -114,26 +114,7 @@ cumulative_dat <- lgr.dat %>%
 todays_date <- Sys.Date()
 current_year <- year(todays_date)
 
-sthd_alter <- cumulative_dat %>% 
-  filter(select_spp=="Steelhead") %>% 
-  mutate(add_yr=dummyd+years(x=1),
-         dam_month=month(dummyd),
-         spawn_year=ifelse(dam_month<7,yr,(yr+1)),
-         run_yr=if_else(dam_month>6,yr,(yr-1)),
-         year_cat=paste(run_yr,spawn_year,sep="-"),
-         dummyd=if_else(dam_month<7,add_yr,dummyd),
-         year_cat=ifelse(is.na(run_yr),"Average of Last 5 Years",year_cat))
 
-
-st_test <- daily_base.f(dat=sthd_alter)
-st_test
-
-sthd_alter %>% ggplot(aes(dummyd,Number_Passed,label=Day))+
-  geom_line(aes(color=year_cat))+
-  scale_color_fivethirtyeight()+
-  theme_fivethirtyeight()+
-  labs(x="",y="Number Passing Lower Granite Dam")+
-  scale_x_date(date_breaks="1 month",date_labels="%B")
 
 #write a function for the base daily plot that can be slightly modified
 
@@ -147,17 +128,25 @@ daily_base.f <- function(dat=plotdat){
     geom_line(aes(color=Year))+
     scale_color_fivethirtyeight()+
     theme_fivethirtyeight()+
-    labs(x="",y="Number Passing Lower Granite Dam")+
+    labs(x="",y="Number Passing Lower Granite Dam",
+         color="")+
     scale_x_date(limits=c(x_min,x_max),
-                 date_breaks="1 month",date_labels="%B")
+                 date_breaks="1 month",date_labels="%B")+
+    theme(axis.text.x = element_text(size=18,
+                                     angle=40,hjust=1,vjust=1),
+          legend.text=element_text(size=18),
+          legend.title=element_text(size=18))
 }
+
+test <- daily_base.f(dat=test.dat)
+test
+
+ggplotly(test)
 
 test.dat <- cumulative_dat %>% 
   filter(select_spp=="Sockeye")
 
 
-test <- daily_base.f(dat=test.dat)
-test
 
 x_min <- min(plotdat$dummyd)
 x_max <- max(plotdat$dummyd)
@@ -174,10 +163,39 @@ cumulative_base.f <- function(dat=plotdat){
     geom_line(aes(color=Year))+
     scale_color_fivethirtyeight()+
     theme_fivethirtyeight()+
-    labs(x="",y="Cumulative Number Passed, Lower Granite Dam")+
+    labs(x="",y="Cumulative Number Passed, Lower Granite Dam",
+         color="")+
     scale_x_date(limits=c(x_min,x_max),
-                  date_breaks="1 month",date_labels="%B")
+                  date_breaks="1 month",date_labels="%B")+
+    theme(axis.text.x = element_text(size=18,
+                                     angle=40,hjust=1,vjust=1),
+          legend.text=element_text(size=18),
+          legend.title=element_text(size=18))
 }
+
+
+sthd_alter <- cumulative_dat %>% 
+  filter(select_spp=="Steelhead"&
+           Origin=="Total") %>% 
+  mutate(add_yr=dummyd+years(x=1),
+         dam_month=month(dummyd),
+         spawn_year=ifelse(dam_month<7,yr,(yr+1)),
+         run_yr=if_else(dam_month>6,yr,(yr-1)),
+         year_cat=paste(run_yr,spawn_year,sep="-"),
+         dummyd=if_else(dam_month<7,add_yr,dummyd),
+         year_cat=ifelse(is.na(run_yr),"Average of Last 5 Years",year_cat))
+
+
+sthd_alter %>% ggplot(aes(dummyd,Number_Passed,label=Day))+
+  geom_line(aes(color=year_cat))+
+  scale_color_fivethirtyeight()+
+  theme_fivethirtyeight()+
+  labs(x="",y="Number Passing Lower Granite Dam")+
+  scale_x_date(date_breaks="1 month",date_labels="%B")
+
+
+st_test <- daily_base.f(dat=sthd_alter)
+st_test
 
 #start making a shiny app with these data, just Chinook for now
 
@@ -188,6 +206,7 @@ cumulative_base.f <- function(dat=plotdat){
 header <- dashboardHeader(title="Passage at Dams")
 sidebar <- dashboardSidebar(width=500,
   sidebarMenu(
+    tags$style(type='text/css', ".selectize-input { font-size: 32px; line-height: 32px;} .selectize-dropdown { font-size: 28px; line-height: 28px; }"),
     menuSubItem(icon = NULL,
                 selectInput("species",
                             label="Choose a Species:",
