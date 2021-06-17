@@ -135,21 +135,11 @@ daily_base.f <- function(dat=plotdat){
     theme(axis.text.x = element_text(size=18,
                                      angle=40,hjust=1,vjust=1),
           legend.text=element_text(size=18),
-          legend.title=element_text(size=18))
+          legend.title=element_text(size=18),
+          plot.title=element_text(size=16))
 }
 
-test <- daily_base.f(dat=test.dat)
-test
 
-ggplotly(test)
-
-test.dat <- cumulative_dat %>% 
-  filter(select_spp=="Sockeye")
-
-
-
-x_min <- min(plotdat$dummyd)
-x_max <- max(plotdat$dummyd)
 
 #write a function for the base cumulative plot that can be slightly modified
 
@@ -170,7 +160,8 @@ cumulative_base.f <- function(dat=plotdat){
     theme(axis.text.x = element_text(size=18,
                                      angle=40,hjust=1,vjust=1),
           legend.text=element_text(size=18),
-          legend.title=element_text(size=18))
+          legend.title=element_text(size=18),
+          plot.title=element_text(size=16))
 }
 
 
@@ -206,7 +197,7 @@ st_test
 header <- dashboardHeader(title="Passage at Dams")
 sidebar <- dashboardSidebar(width=500,
   sidebarMenu(
-    tags$style(type='text/css', ".selectize-input { font-size: 32px; line-height: 32px;} .selectize-dropdown { font-size: 28px; line-height: 28px; }"),
+    tags$style(type='text/css', ".selectize-input { font-size: 20px; line-height: 20px;} .selectize-dropdown { font-size: 20px; line-height: 20px; }"),
     menuSubItem(icon = NULL,
                 selectInput("species",
                             label="Choose a Species:",
@@ -238,6 +229,8 @@ server <- function(input,output,session){
 
   
   output$secondSelection <- renderMenu({
+    req(input$species)
+    
     if(input$species=="Spring-Summer Chinook"|
        input$species=="Fall Chinook"|
        input$species=="Coho")
@@ -263,6 +256,8 @@ server <- function(input,output,session){
   })
   
   output$slider <- renderMenu({
+    
+    req(input$species)
     
     if(input$species=="Spring-Summer Chinook")
       return(menuSubItem(icon=NULL,
@@ -329,6 +324,9 @@ server <- function(input,output,session){
   
   reactive_dat <- reactive({
     
+    req(input$dates)
+    req(input$group_select)
+    
     x_min <- min(input$dates-1)
     x_max <- max(input$dates+1)
     
@@ -364,6 +362,8 @@ server <- function(input,output,session){
   })
   
   reactive_plot <- reactive({
+    req(reactive_dat())
+    req(input$species)
     plotdat=reactive_dat()
     
     x_min <- min(plotdat$dummyd)
@@ -408,7 +408,8 @@ server <- function(input,output,session){
   })
   
   reactive_cumulative_plot <- reactive({
-    
+    req(reactive_dat())
+    req(input$species)
     plotdat=reactive_dat()
     
     x_min <- min(plotdat$dummyd)
